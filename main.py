@@ -1,45 +1,38 @@
 import os
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+    Application, CommandHandler, CallbackQueryHandler
 )
 from handlers.menu import menu, menu_callback_handler
 from system.admin import admin_menu, admin_callback_handler
 
-TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
-
-# --- No-op handlers to swallow anything we don't explicitly handle ---
-async def ignore_everything(update, context):
-    # Intentionally do nothing (prevents accidental auto-replies)
-    return
-
-async def ignore_unknown_command(update, context):
-    # Silently ignore unknown commands to avoid "unnecessary" replies.
-    return
+# Lấy BOT TOKEN từ biến môi trường Railway
+TOKEN = os.getenv("BOT_TOKEN")
 
 def main():
+    if not TOKEN:
+        raise ValueError("❌ BOT_TOKEN chưa được set trong Railway Variables")
+
     app = Application.builder().token(TOKEN).build()
 
-    # Only these commands are allowed to respond
+    # Đăng ký các lệnh
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("admin", admin_menu))
 
-    # Callback queries: split user vs admin by prefix
-    app.add_handler(CallbackQueryHandler(menu_callback_handler, pattern=r"^(?!admin_)"))
-    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern=r"^admin_"))
+    # Callback handlers
+    app.add_handler(CallbackQueryHandler(menu_callback_handler, pattern="^(?!admin_)"))
+    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^admin_"))
 
-    # -------- STRICT MODE --------
-    # 1) Ignore ALL text that isn't a command
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ignore_everything), group=100)
-    # 2) Ignore *every other* update type we don't need (stickers, photos, etc.)
-    app.add_handler(MessageHandler(~filters.COMMAND & ~filters.TEXT, ignore_everything), group=101)
-    # 3) Silently drop unknown commands so the bot doesn't chat back unnecessarily
-    app.add_handler(MessageHandler(filters.COMMAND, ignore_unknown_command), group=102)
+    # Railway sẽ tự set PORT, nếu không có thì mặc định 8080
+    PORT = int(os.getenv("PORT", 8080))
 
-    print("🤖 Bot is running... Use /menu to start.")
-    app.run_polling(
-        allowed_updates=["message", "callback_query"],
-        drop_pending_updates=True,  # don't process old backlog
-        stop_signals=None,          # improve shutdown reliability in some hosts
+    print("🤖 Bot is running with webhook...")
+
+    # URL Railway app, thay YOUR-APP-NAME bằng tên project của bạn
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=TOKEN,
+        webhook_url=f"https://YOUR-APP-NAME.up.railway.app/{TOKEN}"
     )
 
 if __name__ == "__main__":
